@@ -1232,6 +1232,14 @@ async function convert(
     throw new MediaTypeError(`Invalid type: the determined type ${determinedType} does not match the specified type ${type}.`);
   }
 
+  // List of input types that support custom output formats (LibreOffice-based conversions)
+  const libreOfficeTypes = ["rtf", "docx", "xlsx", "pptx", "opendocument", "odt", "pages", "numbers", "keynote"];
+
+  // Validate that outputFormat is only used with LibreOffice conversions
+  if (outputFormat && outputFormat !== "pdf" && !libreOfficeTypes.includes(inputType)) {
+    throw new MediaTypeError(`Custom output format "${outputFormat}" is only supported for LibreOffice conversions (${libreOfficeTypes.join(", ")}). Input type "${inputType}" does not support custom output formats.`);
+  }
+
   switch (inputType) {
     case "html":
       return await convertChrome(input, resources);
@@ -1317,6 +1325,11 @@ const outputFormatToMimeType: Record<string, string> = {
 };
 
 /**
+ * Supported output formats for LibreOffice conversions.
+ */
+const supportedOutputFormats = Object.keys(outputFormatToMimeType);
+
+/**
  * Converts the given document using LibreOffice.
  *
  * @see https://www.libreoffice.org/
@@ -1325,11 +1338,16 @@ async function convertLibreOffice(
     input: Express.Multer.File,
     outputFormat: string = "pdf",
 ): Promise<ConversionResult> {
+  // Validate the output format to prevent arbitrary values being passed to unoserver
+  if (!supportedOutputFormats.includes(outputFormat)) {
+    throw new MediaTypeError(`Unsupported output format: ${outputFormat}. Supported formats: ${supportedOutputFormats.join(", ")}`);
+  }
+
   for (const unoserverInstance of unoserverInstances) {
     if (unoserverInstance.isAvailable()) {
       return {
         output: await unoserverInstance.convert(input.buffer, outputFormat),
-        mimeType: outputFormatToMimeType[outputFormat] ?? "application/octet-stream",
+        mimeType: outputFormatToMimeType[outputFormat],
       };
     }
   }
